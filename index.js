@@ -1,6 +1,7 @@
 const dependencies = ["@saltcorn/large-language-model", "@saltcorn/pgvector"];
 const { getState } = require("@saltcorn/data/db/state");
 const { eval_expression } = require("@saltcorn/data/models/expression");
+const Table = require("@saltcorn/data/models/table");
 
 module.exports = {
   sc_plugin_api_version: 1,
@@ -131,6 +132,84 @@ module.exports = {
           { [vec_field]: JSON.stringify(vec) },
           row[table.pk_name]
         );
+      },
+    },
+    chunk_document: {
+      requireRow: true,
+      configFields: async ({ table, mode }) => {
+        if (!table) return [];
+        const textFields = table.fields
+          .filter((f) => f.type?.sql_name === "text")
+          .map((f) => f.name);
+        const { child_field_list, child_relations } =
+          await table.get_child_relations();
+        console.log({ child_field_list, cr: child_relations[0] });
+        const chunkOptions = {};
+        child_relations.forEach(({ key_field, table }) => {
+          chunkOptions[`${table.name}.${key_field.name}`] = table.fields
+            .filter((f) => f.type.sql_name === "text")
+            .map((f) => f.name);
+        });
+        return [
+          {
+            name: "text_field",
+            label: "Text field",
+            sublabel: "Field with the source document",
+            type: "String",
+            required: true,
+            attributes: { options: textFields },
+          },
+          {
+            name: "joined_table",
+            label: "Relation",
+            sublabel: "Relation to chunks table",
+            input_type: "select",
+            options: child_field_list,
+          },
+          {
+            name: "chunk_field",
+            label: "Chunk field",
+            type: "String",
+            required: false,
+            attributes: {
+              calcOptions: ["joined_table", chunkOptions],
+            },
+          },
+          {
+            name: "strategy",
+            label: "Chunking strategy",
+            type: "String",
+            required: true,
+            attributes: { options: ["Paragraphs"] },
+          },
+        ];
+      },
+      run: async ({
+        row,
+        table,
+        mode,
+        user,
+        configuration: { joined_table, chunk_field, text_field, strategy },
+      }) => {
+        const [join_table_name, join_field] = joined_table.split(".");
+        const joinTable = Table.findOne({ name: join_table_name });
+        if (!joinTable)
+          throw new Error(
+            `Table ${join_table_name} not found in insert_joined_row action`
+          );
+        const doc = row[text_field];
+        if (!doc) return;
+        const chunks = doc
+          .split("\n\n")
+          .map((c) => c.trim())
+          .filter(Boolean);
+        for (const chunk of chunks) {
+          const newRow = {
+            [join_field]: row[table.pk_name],
+            [chunk_field]: chunk,
+          };
+          await joinTable.insertRow(newRow);
+        }
       },
     },
   },
