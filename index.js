@@ -1,5 +1,6 @@
 const dependencies = ["@saltcorn/large-language-model", "@saltcorn/pgvector"];
 const { getState } = require("@saltcorn/data/db/state");
+const { eval_expression } = require("@saltcorn/data/models/expression");
 
 module.exports = {
   sc_plugin_api_version: 1,
@@ -9,6 +10,58 @@ module.exports = {
     get_embedding: {
       requireRow: true,
       configFields: ({ table, mode }) => {
+        const override_fields = [
+          {
+            name: "override_config",
+            label: "Override LLM configuration",
+            type: "Bool",
+          },
+          {
+            name: "override_endpoint",
+            label: "Endpoint",
+            type: "String",
+            showIf: { override_config: true },
+          },
+          {
+            name: "override_model",
+            label: "Model",
+            type: "String",
+            showIf: { override_config: true },
+          },
+          {
+            name: "override_apikey",
+            label: "API key",
+            type: "String",
+            showIf: { override_config: true },
+          },
+          {
+            name: "override_bearer",
+            label: "Bearer",
+            type: "String",
+            showIf: { override_config: true },
+          },
+        ];
+        if (mode === "workflow") {
+          return [
+            {
+              name: "text_formula",
+              label: "Text expression",
+              sublabel:
+                "JavaScript expression evalutating to the text to be embedded, based on the context",
+              type: "String",
+              required: true,
+            },
+            {
+              name: "vec_field",
+              label: "Vector variable",
+              sublabel:
+                "Set the generated embedding vector to this context variable",
+              type: "String",
+              required: true,
+            },
+            ...override_fields,
+          ];
+        }
         if (table) {
           const vecFields = table.fields
             .filter((f) => f.type?.name === "PGVector")
@@ -17,7 +70,7 @@ module.exports = {
             .filter((f) => f.type?.sql_name === "text")
             .map((f) => f.name);
 
-          const cfgFields = [
+          return [
             {
               name: "text_field",
               label: "Text field",
@@ -34,44 +87,18 @@ module.exports = {
               required: true,
               attributes: { options: vecFields },
             },
-            {
-              name: "override_config",
-              label: "Override LLM configuration",
-              type: "Bool",
-            },
-            {
-              name: "override_endpoint",
-              label: "Endpoint",
-              type: "String",
-              showIf: { override_config: true },
-            },
-            {
-              name: "override_model",
-              label: "Model",
-              type: "String",
-              showIf: { override_config: true },
-            },
-            {
-              name: "override_apikey",
-              label: "API key",
-              type: "String",
-              showIf: { override_config: true },
-            },
-            {
-              name: "override_bearer",
-              label: "Bearer",
-              type: "String",
-              showIf: { override_config: true },
-            },
+            ...override_fields,
           ];
-          return cfgFields;
         }
       },
       run: async ({
         row,
         table,
+        mode,
+        user,
         configuration: {
           text_field,
+          text_formula,
           vec_field,
           override_config,
           override_endpoint,
@@ -88,7 +115,18 @@ module.exports = {
           opts.apikey = override_apikey;
           opts.bearer = override_bearer;
         }
-        const vec = await embedF.run(row[text_field], opts);
+        const text =
+          mode === "workflow"
+            ? eval_expression(
+                text_formula,
+                row,
+                user,
+                "get_embedding text formula"
+              )
+            : row[text_field];
+
+        const vec = await embedF.run(text, opts);
+        if (mode === "workflow") return { [vec_field]: JSON.stringify(vec) };
         await table.updateRow(
           { [vec_field]: JSON.stringify(vec) },
           row[table.pk_name]
