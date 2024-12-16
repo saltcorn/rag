@@ -11,37 +11,24 @@ module.exports = {
     get_embedding: {
       requireRow: true,
       configFields: ({ table, mode }) => {
-        const override_fields = [
-          {
-            name: "override_config",
-            label: "Override LLM configuration",
-            type: "Bool",
-          },
-          {
-            name: "override_endpoint",
-            label: "Endpoint",
-            type: "String",
-            showIf: { override_config: true },
-          },
-          {
-            name: "override_model",
-            label: "Model",
-            type: "String",
-            showIf: { override_config: true },
-          },
-          {
-            name: "override_apikey",
-            label: "API key",
-            type: "String",
-            showIf: { override_config: true },
-          },
-          {
-            name: "override_bearer",
-            label: "Bearer",
-            type: "String",
-            showIf: { override_config: true },
-          },
-        ];
+        const llm_config =
+          getState().plugin_cfgs["large-language-model"] ||
+          getState().plugin_cfgs["@saltcorn/large-language-model"];
+        const override_fields =
+          llm_config.backend === "OpenAI-compatible API" &&
+          (llm_config.altconfigs || []).filter((c) => c.name).length
+            ? [
+                {
+                  name: "override_config",
+                  label: "Alternative LLM configuration",
+                  type: "String",
+                  attributes: {
+                    options: llm_config.altconfigs.map((c) => c.name),
+                  },
+                },
+              ]
+            : [];
+
         if (mode === "workflow") {
           return [
             {
@@ -97,24 +84,21 @@ module.exports = {
         table,
         mode,
         user,
-        configuration: {
-          text_field,
-          text_formula,
-          vec_field,
-          override_config,
-          override_endpoint,
-          override_model,
-          override_apikey,
-          override_bearer,
-        },
+        configuration: { text_field, text_formula, vec_field, override_config },
       }) => {
         const embedF = getState().functions.llm_embedding;
         const opts = {};
         if (override_config) {
-          opts.endpoint = override_endpoint;
-          opts.model = override_model;
-          opts.apikey = override_apikey;
-          opts.bearer = override_bearer;
+          const llm_config =
+            getState().plugin_cfgs["large-language-model"] ||
+            getState().plugin_cfgs["@saltcorn/large-language-model"];
+          const altcfg = llm_config.altconfigs.find(
+            (c) => c.name === override_config
+          );
+          opts.endpoint = altcfg.endpoint;
+          opts.model = altcfg.model;
+          opts.apikey = altcfg.apikey;
+          opts.bearer = altcfg.bearer;
         }
         const text =
           mode === "workflow"
@@ -213,7 +197,7 @@ module.exports = {
         }
       },
     },
-    vector_similarity_search: {      
+    vector_similarity_search: {
       configFields: async ({ table, mode }) => {
         if (mode !== "workflow") return [];
         const allTables = await Table.find();
