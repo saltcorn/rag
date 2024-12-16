@@ -34,13 +34,61 @@ module.exports = {
               required: true,
               attributes: { options: vecFields },
             },
+            {
+              name: "override_config",
+              label: "Override LLM configuration",
+              type: "Bool",
+            },
+            {
+              name: "override_endpoint",
+              label: "Endpoint",
+              type: "String",
+              showIf: { override_config: true },
+            },
+            {
+              name: "override_model",
+              label: "Model",
+              type: "String",
+              showIf: { override_config: true },
+            },
+            {
+              name: "override_apikey",
+              label: "API key",
+              type: "String",
+              showIf: { override_config: true },
+            },
+            {
+              name: "override_bearer",
+              label: "Bearer",
+              type: "String",
+              showIf: { override_config: true },
+            },
           ];
           return cfgFields;
         }
       },
-      run: async ({ row, table, configuration: { text_field, vec_field } }) => {
+      run: async ({
+        row,
+        table,
+        configuration: {
+          text_field,
+          vec_field,
+          override_config,
+          override_endpoint,
+          override_model,
+          override_apikey,
+          override_bearer,
+        },
+      }) => {
         const embedF = getState().functions.llm_embedding;
-        const vec = await embedF.run(row[text_field]);
+        const opts = {};
+        if (override_config) {
+          opts.endpoint = override_endpoint;
+          opts.model = override_model;
+          opts.apikey = override_apikey;
+          opts.bearer = override_bearer;
+        }
+        const vec = await embedF.run(row[text_field], opts);
         await table.updateRow(
           { [vec_field]: JSON.stringify(vec) },
           row[table.pk_name]
