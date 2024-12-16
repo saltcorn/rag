@@ -1,6 +1,6 @@
 {
   "name": "@saltcorn/rag",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Actions for Retrieval-Augmented Generation",
   "main": "index.js",
   "dependencies": {
