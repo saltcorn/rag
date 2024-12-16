@@ -197,7 +197,7 @@ module.exports = {
             `Table ${join_table_name} not found in insert_joined_row action`
           );
         const doc = row[text_field];
-        
+
         if (!doc) return;
         const chunks = doc
           .split(/\r?\n\r?\n/)
@@ -211,6 +211,84 @@ module.exports = {
           };
           await joinTable.insertRow(newRow);
         }
+      },
+    },
+    vector_similarity_search: {      
+      configFields: async ({ table, mode }) => {
+        if (mode !== "workflow") return [];
+        const allTables = await Table.find();
+        const tableOpts = [];
+        for (const table of allTables) {
+          table.fields
+            .filter((f) => f.type?.name === "PGVector")
+            .forEach((f) => {
+              tableOpts.push(`${table.name}.${f.name}`);
+            });
+        }
+        return [
+          {
+            name: "vec_field",
+            label: "Vector field",
+            sublabel: "Field to search for vector similarity",
+            type: "String",
+            required: true,
+            attributes: { options: tableOpts },
+          },
+          {
+            name: "search_term_expr",
+            label: "Search term",
+            sublabel:
+              "JavaScript expression, based on the context, for the search term",
+            type: "String",
+          },
+          {
+            name: "limit",
+            label: "Limit",
+            sublabel: "Max number of rows to find",
+            type: "String",
+          },
+          {
+            name: "found_variable",
+            label: "Result variable",
+            sublabel: "Set this context variable to the array of found rows",
+            type: "String",
+            required: true,
+          },
+        ];
+      },
+      run: async ({
+        row,
+        mode,
+        user,
+        configuration: { vec_field, search_term_expr, found_variable, limit },
+      }) => {
+        const search_term = eval_expression(
+          search_term_expr,
+          row,
+          user,
+          "search term formula"
+        );
+        const embedF = getState().functions.llm_embedding;
+        const opts = {};
+        const qembed = await embedF.run(search_term, opts);
+        const [table_name, field_name] = vec_field.split(".");
+        const table = Table.findOne({ name: table_name });
+        if (!table)
+          throw new Error(
+            `Table ${table_name} not found in vector_similarity_search action`
+          );
+        const docs = await table.getRows(
+          {},
+          {
+            orderBy: {
+              operator: "nearL2",
+              field: field_name,
+              target: JSON.stringify(qembed),
+            },
+            limit: +(limit || 10),
+          }
+        );
+        return { [found_variable]: docs };
       },
     },
   },
