@@ -6,12 +6,12 @@ module.exports = {
   plugin_name: "rag",
   dependencies,
   actions: {
-    set_embedding: {
+    get_embedding: {
       requireRow: true,
       configFields: ({ table, mode }) => {
         if (table) {
           const vecFields = table.fields
-            .filter((f) => f.type === "PGVector")
+            .filter((f) => f.type?.name === "PGVector")
             .map((f) => f.name);
           const textFields = table.fields
             .filter((f) => f.type?.sql_name === "text")
@@ -39,8 +39,8 @@ module.exports = {
         }
       },
       run: async ({ row, table, configuration: { text_field, vec_field } }) => {
-        const state = getState();
-        let vec = [1, 2, 3];
+        const embedF = getState().functions.llm_embedding;
+        const vec = await embedF.run(row[text_field]);
         await table.updateRow(
           { [vec_field]: JSON.stringify(vec) },
           row[table.pk_name]
