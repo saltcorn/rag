@@ -1,2 +1,2 @@
 # rag
-Functions for Retrieval-Augmented Generation
+Actions for Retrieval-Augmented Generation
