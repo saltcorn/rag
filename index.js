@@ -97,7 +97,7 @@ module.exports = {
           );
           opts.endpoint = altcfg.endpoint;
           opts.model = altcfg.model;
-          opts.apikey = altcfg.apikey;
+          opts.api_key = altcfg.api_key;
           opts.bearer = altcfg.bearer;
         }
         const text =
