@@ -143,7 +143,6 @@ module.exports = {
           .map((f) => f.name);
         const { child_field_list, child_relations } =
           await table.get_child_relations();
-        console.log({ child_field_list, cr: child_relations[0] });
         const chunkOptions = {};
         child_relations.forEach(({ key_field, table }) => {
           chunkOptions[`${table.name}.${key_field.name}`] = table.fields
@@ -198,11 +197,13 @@ module.exports = {
             `Table ${join_table_name} not found in insert_joined_row action`
           );
         const doc = row[text_field];
+        
         if (!doc) return;
         const chunks = doc
-          .split("\n\n")
+          .split(/\r?\n\r?\n/)
           .map((c) => c.trim())
           .filter(Boolean);
+
         for (const chunk of chunks) {
           const newRow = {
             [join_field]: row[table.pk_name],
