@@ -163,7 +163,13 @@ module.exports = {
             label: "Chunking strategy",
             type: "String",
             required: true,
-            attributes: { options: ["Paragraphs"] },
+            attributes: { options: ["Paragraphs", "Sentences"] },
+          },
+          {
+            name: "locale",
+            label: "Locale",
+            type: "String",
+            showIf: { strategy: "Sentences" },
           },
         ];
       },
@@ -172,7 +178,13 @@ module.exports = {
         table,
         mode,
         user,
-        configuration: { joined_table, chunk_field, text_field, strategy },
+        configuration: {
+          joined_table,
+          chunk_field,
+          text_field,
+          strategy,
+          locale,
+        },
       }) => {
         const [join_table_name, join_field] = joined_table.split(".");
         const joinTable = Table.findOne({ name: join_table_name });
@@ -183,10 +195,27 @@ module.exports = {
         const doc = row[text_field];
 
         if (!doc) return;
-        const chunks = doc
-          .split(/\r?\n\r?\n/)
-          .map((c) => c.trim())
-          .filter(Boolean);
+
+        let chunks = [];
+        switch (strategy) {
+          case "Sentences":
+            const segmenter = new Intl.Segmenter(
+              locale || getState().getConfig("default_locale", "en"),
+              {
+                granularity: "sentence",
+              }
+            );
+
+            chunks = Array.from(segmenter.segment(doc), (s) => s.segment);
+
+            break;
+          default:
+            chunks = doc
+              .split(/\r?\n\r?\n/)
+              .map((c) => c.trim())
+              .filter(Boolean);
+            break;
+        }
 
         for (const chunk of chunks) {
           const newRow = {
