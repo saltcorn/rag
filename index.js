@@ -231,11 +231,17 @@ module.exports = {
         if (mode !== "workflow") return [];
         const allTables = await Table.find();
         const tableOpts = [];
+        const relation_opts = {};
         for (const table of allTables) {
           table.fields
             .filter((f) => f.type?.name === "PGVector")
             .forEach((f) => {
-              tableOpts.push(`${table.name}.${f.name}`);
+              const relNm = `${table.name}.${f.name}`;
+              tableOpts.push(relNm);
+              const fkeys = table.fields
+                .filter((f) => f.is_fkey)
+                .map((f) => f.name);
+              relation_opts[relNm] = ["", ...fkeys];
             });
         }
         return [
@@ -246,6 +252,15 @@ module.exports = {
             type: "String",
             required: true,
             attributes: { options: tableOpts },
+          },
+          {
+            name: "doc_relation",
+            label: "Document relation",
+            sublabel:
+              "Optional. For each vector match, retrieve row in the table related by this key instead",
+            type: "String",
+            required: true,
+            attributes: { calcOptions: ["vec_field", relation_opts] },
           },
           {
             name: "search_term_expr",
@@ -273,7 +288,13 @@ module.exports = {
         row,
         mode,
         user,
-        configuration: { vec_field, search_term_expr, found_variable, limit },
+        configuration: {
+          vec_field,
+          doc_relation,
+          search_term_expr,
+          found_variable,
+          limit,
+        },
       }) => {
         const search_term = eval_expression(
           search_term_expr,
@@ -290,7 +311,7 @@ module.exports = {
           throw new Error(
             `Table ${table_name} not found in vector_similarity_search action`
           );
-        const docs = await table.getRows(
+        const vmatch = await table.getRows(
           {},
           {
             orderBy: {
@@ -301,7 +322,14 @@ module.exports = {
             limit: +(limit || 10),
           }
         );
-        return { [found_variable]: docs };
+        if (!doc_relation) return { [found_variable]: vmatch };
+        else {
+          const relField = table.getField(doc_relation);
+          const relTable = Table.findOne(relField.reftable_name);
+          const ids = vmatch.map((vrow) => vrow[doc_relation]);
+          const docs = await relTable.getRows({ id: { in: ids } });
+          return { [found_variable]: docs };
+        }
       },
     },
   },
