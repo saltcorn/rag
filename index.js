@@ -271,6 +271,14 @@ module.exports = {
             type: "String",
           },
           {
+            name: "where_expr",
+            label: "Where",
+            class: "validate-expression",
+            sublabel:
+              "Optional. JavaScript where-expression to restrict chunks searched",
+            type: "String",
+          },
+          {
             name: "limit",
             label: "Limit",
             sublabel: "Max number of rows to find",
@@ -294,6 +302,7 @@ module.exports = {
           vec_field,
           doc_relation,
           search_term_expr,
+          where_expr,
           found_variable,
           limit,
         },
@@ -304,6 +313,14 @@ module.exports = {
           user,
           "search term formula"
         );
+        const where_obj = where_expr
+          ? eval_expression(
+              where_expr,
+              row,
+              user,
+              "where expression in vector_similarity_search"
+            )
+          : {};
         const embedF = getState().functions.llm_embedding;
         const opts = {};
         const qembed = await embedF.run(search_term, opts);
@@ -314,17 +331,14 @@ module.exports = {
             `Table ${table_name} not found in vector_similarity_search action`
           );
         const selLimit = +(limit || 10);
-        const vmatch = await table.getRows(
-          {},
-          {
-            orderBy: {
-              operator: "nearL2",
-              field: field_name,
-              target: JSON.stringify(qembed),
-            },
-            limit: doc_relation ? 5 * selLimit : selLimit,
-          }
-        );
+        const vmatch = await table.getRows(where_obj, {
+          orderBy: {
+            operator: "nearL2",
+            field: field_name,
+            target: JSON.stringify(qembed),
+          },
+          limit: doc_relation ? 5 * selLimit : selLimit,
+        });
         if (!doc_relation) return { [found_variable]: vmatch };
         else {
           const relField = table.getField(doc_relation);
