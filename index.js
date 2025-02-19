@@ -265,6 +265,7 @@ module.exports = {
           {
             name: "search_term_expr",
             label: "Search term",
+            class: "validate-expression",
             sublabel:
               "JavaScript expression, based on the context, for the search term",
             type: "String",
@@ -278,6 +279,7 @@ module.exports = {
           {
             name: "found_variable",
             label: "Result variable",
+            class: "validate-identifier",
             sublabel: "Set this context variable to the array of found rows",
             type: "String",
             required: true,
@@ -311,6 +313,7 @@ module.exports = {
           throw new Error(
             `Table ${table_name} not found in vector_similarity_search action`
           );
+        const selLimit = +(limit || 10);
         const vmatch = await table.getRows(
           {},
           {
@@ -319,15 +322,22 @@ module.exports = {
               field: field_name,
               target: JSON.stringify(qembed),
             },
-            limit: +(limit || 10),
+            limit: doc_relation ? 5 * selLimit : selLimit,
           }
         );
         if (!doc_relation) return { [found_variable]: vmatch };
         else {
           const relField = table.getField(doc_relation);
           const relTable = Table.findOne(relField.reftable_name);
-          const ids = vmatch.map((vrow) => vrow[doc_relation]);
-          const docs = await relTable.getRows({ id: { in: ids } });
+          const ids = [];
+          vmatch.forEach((vrow) => {
+            if (ids.length < selLimit) ids.push(vrow[doc_relation]);
+          });
+          const docsUnsorted = await relTable.getRows({ id: { in: ids } });
+          //ensure order
+          const docs = ids
+            .map((id) => docsUnsorted.find((d) => d.id == id))
+            .filter(Boolean);
           return { [found_variable]: docs };
         }
       },
