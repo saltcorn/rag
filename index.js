@@ -332,6 +332,12 @@ module.exports = {
               "where expression in vector_similarity_search"
             )
           : {};
+        const [table_name, field_name] = vec_field.split(".");
+        const table = Table.findOne({ name: table_name });
+        if (!table)
+          throw new Error(
+            `Table ${table_name} not found in vector_similarity_search action`
+          );
         if (where_doc_expr) {
           const relField = table.getField(doc_relation);
           const relTable = Table.findOne(relField.reftable_name);
@@ -352,12 +358,6 @@ module.exports = {
         const embedF = getState().functions.llm_embedding;
         const opts = {};
         const qembed = await embedF.run(search_term, opts);
-        const [table_name, field_name] = vec_field.split(".");
-        const table = Table.findOne({ name: table_name });
-        if (!table)
-          throw new Error(
-            `Table ${table_name} not found in vector_similarity_search action`
-          );
         const selLimit = +(limit || 10);
         const vmatch = await table.getRows(where_obj, {
           orderBy: {
