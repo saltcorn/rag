@@ -1,5 +1,6 @@
 const dependencies = ["@saltcorn/large-language-model", "@saltcorn/pgvector"];
 const { getState } = require("@saltcorn/data/db/state");
+const db = require("@saltcorn/data/db");
 const { eval_expression } = require("@saltcorn/data/models/expression");
 const Table = require("@saltcorn/data/models/table");
 
@@ -279,6 +280,15 @@ module.exports = {
             type: "String",
           },
           {
+            name: "where_doc_expr",
+            label: "Where doc",
+            class: "validate-expression",
+            sublabel:
+              "Optional. JavaScript where-expression to restrict documents searched",
+            type: "String",
+            showIf: { doc_relation: Object.values(relation_opts).flat(1) },
+          },
+          {
             name: "limit",
             label: "Limit",
             sublabel: "Max number of rows to find",
@@ -303,6 +313,7 @@ module.exports = {
           doc_relation,
           search_term_expr,
           where_expr,
+          where_doc_expr,
           found_variable,
           limit,
         },
@@ -321,6 +332,23 @@ module.exports = {
               "where expression in vector_similarity_search"
             )
           : {};
+        if (where_doc_expr) {
+          const relField = table.getField(doc_relation);
+          const relTable = Table.findOne(relField.reftable_name);
+          where_obj[doc_relation] = {
+            inSelect: {
+              tenant: db.getTenantSchema(),
+              field: relTable.pk_name,
+              table: relTable.name,
+              where: eval_expression(
+                where_doc_expr,
+                row,
+                user,
+                "where doc expression in vector_similarity_search"
+              ),
+            },
+          };
+        }
         const embedF = getState().functions.llm_embedding;
         const opts = {};
         const qembed = await embedF.run(search_term, opts);
