@@ -16,15 +16,15 @@ module.exports = {
           getState().plugin_cfgs["large-language-model"] ||
           getState().plugin_cfgs["@saltcorn/large-language-model"];
         const override_fields =
-          llm_config.backend === "OpenAI-compatible API" &&
-          (llm_config.altconfigs || []).filter((c) => c.name).length
+          llm_config?.backend === "OpenAI-compatible API" &&
+          (llm_config?.altconfigs || []).filter((c) => c.name).length
             ? [
                 {
                   name: "override_config",
                   label: "Alternative LLM configuration",
                   type: "String",
                   attributes: {
-                    options: llm_config.altconfigs.map((c) => c.name),
+                    options: llm_config?.altconfigs.map((c) => c.name),
                   },
                 },
               ]
